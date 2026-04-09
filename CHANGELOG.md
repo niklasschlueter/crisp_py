@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.6.0](https://github.com/utiasDSL/crisp_py/compare/v3.5.0...v3.6.0) (2026-04-09)
+
+
+### Features
+
+* Admittance Controller & Variable stiffness support ([#75](https://github.com/utiasDSL/crisp_py/issues/75)) ([714064c](https://github.com/utiasDSL/crisp_py/commit/714064ccc2ed54edc7bb19462ac2dbdbf12c47c0))
+
 ## [3.5.0](https://github.com/utiasDSL/crisp_py/compare/v3.4.0...v3.5.0) (2026-04-02)
 
 
