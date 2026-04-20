@@ -43,7 +43,8 @@ class Robot:
         cartesian_controller_parameters_client: Client for Cartesian controller parameters
     """
 
-    THREADS_REQUIRED = 4
+    # Single-threaded by default: see crisp_py/camera/camera.py note for rationale.
+    THREADS_REQUIRED = 1
 
     def __init__(
         self,
@@ -255,10 +256,16 @@ class Robot:
     def _spin_node(self):
         if not rclpy.ok():
             rclpy.init()
-        executor = rclpy.executors.MultiThreadedExecutor(num_threads=self.THREADS_REQUIRED)
+        executor = (
+            rclpy.executors.MultiThreadedExecutor(num_threads=self.THREADS_REQUIRED)
+            if self.THREADS_REQUIRED > 1
+            else rclpy.executors.SingleThreadedExecutor()
+        )
         executor.add_node(self.node)
-        while rclpy.ok():
-            executor.spin_once(timeout_sec=0.1)
+        try:
+            executor.spin()
+        except rclpy.executors.ExternalShutdownException:
+            pass  # rclpy shut down externally; daemon thread done.
 
     @property
     def nq(self) -> int:

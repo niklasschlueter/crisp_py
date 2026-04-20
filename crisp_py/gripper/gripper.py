@@ -8,7 +8,7 @@ import yaml
 from control_msgs.action import GripperCommand
 from rclpy.action.client import ActionClient
 from rclpy.callback_groups import ReentrantCallbackGroup
-from rclpy.executors import MultiThreadedExecutor
+from rclpy.executors import MultiThreadedExecutor, SingleThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import qos_profile_system_default
 from sensor_msgs.msg import JointState
@@ -23,7 +23,8 @@ from crisp_py.utils.callback_monitor import CallbackMonitor
 class Gripper:
     """Interface for gripper wrapper."""
 
-    THREADS_REQUIRED = 2
+    # Single-threaded by default: see crisp_py/camera/camera.py note for rationale.
+    THREADS_REQUIRED = 1
 
     def __init__(
         self,
@@ -166,10 +167,16 @@ class Gripper:
     def _spin_node(self):
         if not rclpy.ok():
             rclpy.init()
-        executor = MultiThreadedExecutor(num_threads=self.THREADS_REQUIRED)
+        executor = (
+            MultiThreadedExecutor(num_threads=self.THREADS_REQUIRED)
+            if self.THREADS_REQUIRED > 1
+            else SingleThreadedExecutor()
+        )
         executor.add_node(self.node)
-        while rclpy.ok():
-            executor.spin_once(timeout_sec=0.1)
+        try:
+            executor.spin()
+        except rclpy.executors.ExternalShutdownException:
+            pass  # rclpy shut down externally; daemon thread done.
 
     @property
     def min_value(self) -> float:

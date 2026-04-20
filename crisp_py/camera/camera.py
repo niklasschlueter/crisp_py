@@ -27,7 +27,10 @@ class Camera:
     (Note: The image will be cropped to fit the target resolution if necessary.)
     """
 
-    THREADS_REQUIRED = 2
+    # Single-threaded by default: rclpy's MultiThreadedExecutor with ReentrantCallbackGroup
+    # serializes worse than SingleThreadedExecutor under GIL + per-node wait-set locks,
+    # especially with a second subscription on the same node (~5x throughput drop).
+    THREADS_REQUIRED = 1
 
     def __init__(
         self,
@@ -154,10 +157,16 @@ class Camera:
     def _spin_node(self):
         if not rclpy.ok():
             rclpy.init()
-        executor = rclpy.executors.MultiThreadedExecutor(num_threads=self.THREADS_REQUIRED)
+        executor = (
+            rclpy.executors.MultiThreadedExecutor(num_threads=self.THREADS_REQUIRED)
+            if self.THREADS_REQUIRED > 1
+            else rclpy.executors.SingleThreadedExecutor()
+        )
         executor.add_node(self.node)
-        while rclpy.ok():
-            executor.spin_once(timeout_sec=0.1)
+        try:
+            executor.spin()
+        except rclpy.executors.ExternalShutdownException:
+            pass  # rclpy shut down externally; daemon thread done.
 
     def _uncompress(self, compressed_image: CompressedImage) -> Image:
         """Uncompress a CompressedImage message to an Image message."""

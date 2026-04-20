@@ -65,7 +65,8 @@ def get_sensor_spec(sensor_type: str) -> SensorSpec:
 class Sensor(ABC):
     """Abstract base class for sensor wrappers."""
 
-    THREADS_REQUIRED = 2
+    # Single-threaded by default: see crisp_py/camera/camera.py note for rationale.
+    THREADS_REQUIRED = 1
 
     def __init__(
         self,
@@ -157,8 +158,10 @@ class Sensor(ABC):
             else SingleThreadedExecutor()
         )
         executor.add_node(self.node)
-        while rclpy.ok():
-            executor.spin_once(timeout_sec=0.1)
+        try:
+            executor.spin()
+        except rclpy.executors.ExternalShutdownException:
+            pass  # rclpy shut down externally; daemon thread done.
 
     def is_ready(self) -> bool:
         """Check if the sensor has a value."""
