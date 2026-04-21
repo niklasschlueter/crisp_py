@@ -84,7 +84,14 @@ class Pose:
         msg = PoseStamped()
         msg.header.frame_id = frame_id
         msg.header.stamp = stamp
-        msg.pose.position.x, msg.pose.position.y, msg.pose.position.z = self.position
+        # Cast through Python float — if self.position is a numpy float32 array
+        # (e.g. built from a LeRobot dataset action), a tuple-unpack assigns
+        # numpy.float32 scalars to the message fields, and rclpy's serializer
+        # misreads those as float64, producing subnormal garbage (~1e-315) on
+        # the wire. as_quat() returns float64 so the orientation branch is safe.
+        msg.pose.position.x = float(self.position[0])
+        msg.pose.position.y = float(self.position[1])
+        msg.pose.position.z = float(self.position[2])
         q = self.orientation.as_quat()
         (
             msg.pose.orientation.x,
