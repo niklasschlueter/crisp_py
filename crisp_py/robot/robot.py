@@ -106,9 +106,26 @@ class Robot:
             stale_threshold=max(self.config.max_pose_delay, self.config.max_joint_delay),
         )
 
-        self._target_pose_publisher = self.node.create_publisher(
-            PoseStamped, self.config.target_pose_topic, qos_profile_system_default
-        )
+        # See RobotConfig.publish_target_pose for rationale. When False, Robot
+        # is a passive mirror of an external publisher on target_pose_topic;
+        # it neither creates a publisher nor runs the publish timer, but does
+        # subscribe so self._target_pose stays in sync.
+        if self.config.publish_target_pose:
+            self._target_pose_publisher = self.node.create_publisher(
+                PoseStamped, self.config.target_pose_topic, qos_profile_system_default
+            )
+        else:
+            self._target_pose_publisher = None
+            self._target_pose_subscriber = self.node.create_subscription(
+                PoseStamped,
+                self.config.target_pose_topic,
+                self._callback_monitor.monitor(
+                    f"{namespace.capitalize()} External Target Pose",
+                    self._callback_external_target_pose,
+                ),
+                qos_profile_sensor_data,
+                callback_group=ReentrantCallbackGroup(),
+            )
         self._target_wrench_publisher = self.node.create_publisher(
             WrenchStamped, "target_wrench", qos_profile_system_default
         )
@@ -162,7 +179,15 @@ class Robot:
             callback_group=ReentrantCallbackGroup(),
         )
 
-        if not self.config.use_tf_pose:
+        if self.config.use_tf_pose:
+            # TF-driven target pose mode — unrelated to publish_target_pose.
+            self.node.create_timer(
+                1.0 / self.config.publish_frequency,
+                self._callback_update_tf_pose,
+                ReentrantCallbackGroup(),
+            )
+        elif self.config.publish_target_pose:
+            # Default: republish self._target_pose at publish_frequency.
             self.node.create_timer(
                 1.0 / self.config.publish_frequency,
                 self._callback_monitor.monitor(
@@ -170,12 +195,9 @@ class Robot:
                 ),
                 ReentrantCallbackGroup(),
             )
-        else:
-            self.node.create_timer(
-                1.0 / self.config.publish_frequency,
-                self._callback_update_tf_pose,
-                ReentrantCallbackGroup(),
-            )
+        # else: publish_target_pose=False without TF — no timer needed; the
+        # target_pose subscription (created above) keeps self._target_pose in
+        # sync with the external publisher.
         self.node.create_timer(
             1.0 / self.config.publish_frequency,
             self._callback_monitor.monitor(
@@ -586,6 +608,18 @@ class Robot:
         self._current_pose = Pose.from_ros_msg(msg)
         if self._target_pose is None:
             self._target_pose = self._current_pose.copy()
+
+    def _callback_external_target_pose(self, msg: PoseStamped):
+        """Mirror an externally-published target pose into self._target_pose.
+
+        Used only when config.publish_target_pose is False: Robot does not own
+        the target_pose topic in that case, so it subscribes to whatever an
+        external node (e.g. a spacemouse bridge) publishes and keeps its
+        internal state in sync. Consumers reading robot.target_pose (e.g. the
+        crisp_gym recorder's data_fn) then see the spacemouse's commands as
+        the "action".
+        """
+        self._target_pose = Pose.from_ros_msg(msg)
 
     def _callback_current_twist(self, msg: TwistStamped):
         """Update the current twist from a ROS message.

@@ -67,6 +67,15 @@ class RobotConfig:
     use_prefix: bool = False
     use_admittance_controller: bool = False
 
+    # When True (default), Robot creates a publisher on target_pose_topic and
+    # republishes self._target_pose at publish_frequency. Set False when an
+    # external node (e.g. a spacemouse teleop bridge) already publishes that
+    # topic — otherwise the two publishers trip cartesian_controller's safety
+    # check. With False, Robot instead SUBSCRIBES to target_pose_topic and
+    # mirrors incoming messages into self._target_pose, so code that reads
+    # robot.target_pose (e.g. the crisp_gym recorder) still works.
+    publish_target_pose: bool = True
+
     def num_joints(self) -> int:
         """Returns the number of joints in the robot."""
         return len(self.joint_names)
